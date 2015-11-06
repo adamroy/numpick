@@ -6,6 +6,7 @@ import org.neuroph.core.NeuralNetwork;
 import org.neuroph.core.data.DataSet;
 import org.neuroph.core.data.DataSetRow;
 import org.neuroph.core.learning.LearningRule;
+import org.neuroph.nnet.ConvolutionalNetwork;
 import org.neuroph.nnet.MultiLayerPerceptron;
 import org.neuroph.nnet.Perceptron;
 import org.neuroph.nnet.learning.BackPropagation;
@@ -49,11 +50,10 @@ public class NeurophTest
         // save trained perceptron
         myPerceptron.save("mySamplePerceptron.nnet");
         // load saved neural network
-        NeuralNetwork loadedPerceptron = NeuralNetwork.load("mySamplePerceptron.nnet");
+        NeuralNetwork loadedPerceptron = NeuralNetwork.createFromFile("mySamplePerceptron.nnet");
         // test loaded neural network
         System.out.println("Testing loaded perceptron");
         testNeuralNetwork(loadedPerceptron, trainingSet);
-        
         
         loadedPerceptron.setInput(1.0, 0.0);
         loadedPerceptron.calculate();
