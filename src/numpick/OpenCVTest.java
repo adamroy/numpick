@@ -2,6 +2,7 @@ package numpick;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
@@ -71,9 +72,8 @@ public class OpenCVTest
 	public static void main(String[] args)
 	{
 		System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
-		Mat raw = Imgcodecs.imread("pictures/lineTest.png");
-		// Mat raw = Imgcodecs.imread("pictures/toothpicks.jpg");
-		
+		//Mat raw = Imgcodecs.imread("pictures/lineTest.png");
+		Mat raw = Imgcodecs.imread("pictures/toothpicks.jpg");
 				
 		ImageProcess preProcessor = new ImageProcess(gray, blur, canny);
 		Mat preProcessedImage = preProcessor.process(raw);
@@ -84,10 +84,28 @@ public class OpenCVTest
 		
 		if(!prob)
 		{
-			boolean custom = true;
-			if(custom)
+			boolean customHough = true;
+			if(customHough)
 			{	
-				double[][] lineArray = HoughLines(preProcessedImage, 1, Math.PI/180, 0, 0, 100);
+				AtomicReference<int[][]> accumulatorRef = new AtomicReference<>();
+				double[][] lineArray = HoughLines(preProcessedImage, 1, Math.PI/360, 0, 0, 100, 3, accumulatorRef);
+				
+				int[][] accumulatorArray = accumulatorRef.get();
+				Mat accumulator = new Mat(accumulatorArray.length, accumulatorArray[0].length, CvType.CV_8U);
+				{
+					byte[] pixel = new byte[1];
+					int thetaDim = accumulatorArray.length;
+					int rhoDim = accumulatorArray[0].length;
+					for(int j=0; j<thetaDim; j++)
+						for(int i=0; i<rhoDim; i++)
+						{
+							pixel[0] = (byte)accumulatorArray[j][i];
+							accumulator.put(j, i, pixel);
+						}
+					
+					accumulator = eqHist.process(accumulator);
+					Imgcodecs.imwrite(outputFolder+"accumulator"+suffix+".png", accumulator);
+				}
 				
 				for(int i=0; i<lineArray.length; i++)
 				{
@@ -108,6 +126,7 @@ public class OpenCVTest
 				{
 				      double[] vec = lines.get(i, 0);
 				      double rho = vec[0], theta = vec[1];
+				      System.out.printf("(rho=%.2f, theta=%.2f)\n", rho, theta);
 				      double a = Math.cos(theta), b = Math.sin(theta);
 				      double x0 = a*rho, y0 = b*rho;
 				      Point start = new Point(x0 + 5000 * -b, y0 + 5000 * a);
@@ -158,13 +177,14 @@ public class OpenCVTest
 		return out;
 	}
 	
-	static double[][] HoughLines(Mat image, double deltaRho, double deltaTheta, double width, double maxWidth, int threshold)
+	static double[][] HoughLines(Mat image, double deltaRho, double deltaTheta, double width, double maxWidth, int threshold, int maximaRadius, AtomicReference<int[][]> accumulatorOut)
 	{
 		int maxDim = (int)(Math.max(image.width(), image.height())/deltaRho);
 		int accumWidth = (int)(maxDim * Math.sqrt(2)) * 2;
 		int accumHeight = (int)(Math.PI/deltaTheta);
 		int[][] accumulator = new int[accumHeight][accumWidth];
 		
+		// Run the accumulator on all non-zero pixels
 		byte[] pixel = new byte[1];		
 		for(int j=0; j<image.rows(); j++)
 		{
@@ -195,6 +215,7 @@ public class OpenCVTest
 			}
 		}
 		
+		// Extract the rho's and theta's from the accumulator
 		List<Double> rhoList = new ArrayList<>();
 		List<Double> thetaList = new ArrayList<>();
 		for(int j=0; j<accumHeight; j++)
@@ -204,11 +225,14 @@ public class OpenCVTest
 				int value = accumulator[j][i];
 				if(value > threshold)
 				{
+					// Check to see if this point is a local maxima, as if it is not then the other point should be the line
+					// Prevents lines segment doubles
+					// r is the radius to check for local maxima
 					boolean localMaxima = true;
-					
-					for(int dx=-1; dx<=1; dx++)
+					int r = maximaRadius;
+					for(int dx=-r; dx<=r; dx++)
 					{
-						for(int dy=-1; dy<=1; dy++)
+						for(int dy=-r; dy<=r; dy++)
 						{
 							if(j+dy>=0 && j+dy<accumHeight && i+dx>=0 && i+dx<accumWidth && !(dx==0 && dy==0))
 							{
@@ -217,7 +241,7 @@ public class OpenCVTest
 							}
 						}
 					}
-
+					
 					if(localMaxima)
 					{
 						rhoList.add((i-accumWidth/2)*deltaRho);
@@ -227,21 +251,22 @@ public class OpenCVTest
 			}
 		}
 		
+		// Package as a double array for easy consumption
 		double[][] lines = new double[rhoList.size()][2];
-		
 		System.out.println(rhoList.size());
 		for(int i=0; i<rhoList.size(); i++)
 		{
 			double rho = rhoList.get(i);
 			double theta = thetaList.get(i);
-			//if(theta > Math.PI/2)
-				//rho *= -1;				
 			lines[i][0] = rho;
 			lines[i][1] = theta;
 			
-			System.out.printf("(rho = %.2f, theta = %.2f)\n", lines[i][0], lines[i][1]);
+			System.out.printf("(rho = %.2f, theta = %.2f)\n", rho, theta);
 		}
-		
+
+		// Return accumulator if asked for
+		if(accumulatorOut != null)
+			accumulatorOut.set(accumulator);
 		return lines;
 	}
 	
