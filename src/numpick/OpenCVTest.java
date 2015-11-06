@@ -1,5 +1,8 @@
 package numpick;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
@@ -12,50 +15,111 @@ import org.opencv.imgproc.Imgproc;
 
 public class OpenCVTest
 {
+	static String outputFolder = "processedPictures/";
+	static String suffix = "";
+	
+	
+	static ImageProcessor gray = new ImageProcessor()
+	{
+		@Override
+		public Mat process(Mat src)
+		{
+			Mat gray = new Mat();
+			Imgproc.cvtColor(src, gray, Imgproc.COLOR_BGR2GRAY);
+			Imgcodecs.imwrite(outputFolder+"gray"+suffix+".png", gray);
+			return gray;
+		}
+	};
+	
+	static ImageProcessor eqHist = new ImageProcessor()
+	{
+		@Override
+		public Mat process(Mat src)
+		{
+			Mat eqHist = new Mat();
+			Imgproc.equalizeHist(src, eqHist);
+			Imgcodecs.imwrite(outputFolder+"eqHist"+suffix+".png", eqHist);
+			return eqHist;
+		}
+	};
+	
+	static ImageProcessor blur = new ImageProcessor()
+	{
+		@Override
+		public Mat process(Mat src)
+		{
+			Mat blur = new Mat();
+			Imgproc.blur(src, blur, new Size(3, 3));
+			Imgcodecs.imwrite(outputFolder+"blur"+suffix+".png", blur);
+			return blur;
+		}
+	};
+	
+	static ImageProcessor canny = new ImageProcessor()
+	{
+		@Override
+		public Mat process(Mat src)
+		{
+			int lowThreshold = 50;
+			Mat canny = new Mat();
+			Imgproc.Canny(src, canny, lowThreshold, lowThreshold*3);
+			Imgcodecs.imwrite(outputFolder+"canny"+suffix+".png", canny);
+			return canny;
+		}
+	};
+	
 	public static void main(String[] args)
 	{
-		String outputFolder = "processedPictures/";
-		String suffix = "";
-		
 		System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
-		Mat raw = Imgcodecs.imread("pictures/20151104_155628.jpg");
+		Mat raw = Imgcodecs.imread("pictures/lineTest.png");
+		// Mat raw = Imgcodecs.imread("pictures/toothpicks.jpg");
 		
-		Mat gray = new Mat();
-		Imgproc.cvtColor(raw, gray, Imgproc.COLOR_BGR2GRAY);
-		Imgcodecs.imwrite(outputFolder+"gray"+suffix+".png", gray);
-		
-		Mat blur = new Mat();
-		Imgproc.blur(gray, blur, new Size(3, 3));
-		Imgcodecs.imwrite(outputFolder+"blur"+suffix+".png", blur);
-		
-		int lowThreshold = 50;
-		Mat canny = new Mat();
-		Imgproc.Canny(blur, canny, lowThreshold, lowThreshold*3);
-		Imgcodecs.imwrite(outputFolder+"canny"+suffix+".png", canny);
+				
+		ImageProcess preProcessor = new ImageProcess(gray, blur, canny);
+		Mat preProcessedImage = preProcessor.process(raw);
 		
 		Mat lines = new Mat();
-		Mat hough = gray.clone();
+		Mat hough = raw.clone();
 		boolean prob = false;
 		
 		if(!prob)
 		{
-			Imgproc.HoughLines(canny, lines, 1, Math.PI/180, 100);
-			System.out.printf("Hough lines:\n%s", lines.dump());
-			
-			for (int x = 0; x < Math.min(lines.rows(), 100); x++) 
+			boolean custom = true;
+			if(custom)
+			{	
+				double[][] lineArray = HoughLines(preProcessedImage, 1, Math.PI/180, 0, 0, 100);
+				
+				for(int i=0; i<lineArray.length; i++)
+				{
+				      double[] vec = lineArray[i];
+				      double rho = vec[0], theta = vec[1];
+				      double a = Math.cos(theta), b = Math.sin(theta);
+				      double x0 = a*rho, y0 = b*rho;
+				      Point start = new Point(x0 + 5000 * -b, y0 + 5000 * a);
+				      Point end = new Point(x0 - 5000 * -b, y0 - 5000 * a);
+				      Imgproc.line(hough, start, end, new Scalar(0,0,0), 1);
+				}
+			}
+			else
 			{
-			      double[] vec = lines.get(x, 0);
-			      double rho = vec[0], theta = vec[1];
-			      double a = Math.cos(theta), b = Math.sin(theta);
-			      double x0 = a*rho, y0 = b*rho;
-			      Point start = new Point(x0 + 5000 * -b, y0 + 5000 * a);
-			      Point end = new Point(x0 - 5000 * -b, y0 - 5000 * a);
-			      Imgproc.line(hough, start, end, new Scalar(0,0,0), 3);
+				Imgproc.HoughLines(preProcessedImage, lines, 1, Math.PI/180, 100);
+				
+				for(int i=0; i<lines.rows(); i++)
+				{
+				      double[] vec = lines.get(i, 0);
+				      double rho = vec[0], theta = vec[1];
+				      double a = Math.cos(theta), b = Math.sin(theta);
+				      double x0 = a*rho, y0 = b*rho;
+				      Point start = new Point(x0 + 5000 * -b, y0 + 5000 * a);
+				      Point end = new Point(x0 - 5000 * -b, y0 - 5000 * a);
+				      Imgproc.line(hough, start, end, new Scalar(0,0,0), 1);
+				}
+				
 			}
 		}
 		else 
 		{
-			Imgproc.HoughLinesP(canny, lines, 1, Math.PI/180, 50, 10, 10);
+			Imgproc.HoughLinesP(preProcessedImage, lines, 1, Math.PI/180, 50, 10, 10);
 			
 			for (int x = 0; x < lines.rows(); x++) 
 			{
@@ -71,7 +135,7 @@ public class OpenCVTest
 			}
 		}
 		
-		HoughLines(canny, 1, Math.PI/180, 0, 0, 100);
+		
 		
 		//Mat all = combineMats(raw, gray, blur, canny, hough);
 		Imgcodecs.imwrite(outputFolder+"lines"+suffix+".png", hough);
@@ -96,10 +160,10 @@ public class OpenCVTest
 	
 	static double[][] HoughLines(Mat image, double deltaRho, double deltaTheta, double width, double maxWidth, int threshold)
 	{
-		int maxDim = Math.max(image.width(), image.height());
-		int[][] accumulator = new int[(int)(Math.PI/deltaTheta+1)][(int)(maxDim * Math.sqrt(2))];
-		
-		System.out.printf("Width: %d,  Height: %d\n", image.cols(), image.rows());
+		int maxDim = (int)(Math.max(image.width(), image.height())/deltaRho);
+		int accumWidth = (int)(maxDim * Math.sqrt(2)) * 2;
+		int accumHeight = (int)(Math.PI/deltaTheta);
+		int[][] accumulator = new int[accumHeight][accumWidth];
 		
 		byte[] pixel = new byte[1];		
 		for(int j=0; j<image.rows(); j++)
@@ -118,12 +182,12 @@ public class OpenCVTest
 									y = j,
 									dx = Math.cos(Math.PI - theta) * 10,
 									dy = Math.sin(Math.PI - theta) * 10,
-									xp = x + dx,
-									yp = y + dy,
+									xp = x - dx,
+									yp = y - dy,
 									rho = originToLineDistance(x, y, xp, yp);
 							
-							int thetaIndex = (int)Math.round(theta / deltaTheta);
-							int rhoIndex = (int)Math.round(rho/deltaRho);
+							int thetaIndex = (int)Math.floor(theta / deltaTheta);
+							int rhoIndex = (int)Math.floor((rho)/deltaRho) + accumWidth/2;
 							accumulator[thetaIndex][rhoIndex] += 1;
 						}
 					}
@@ -131,32 +195,51 @@ public class OpenCVTest
 			}
 		}
 		
-		int lineCount = 0;
-		for(int j=0; j<accumulator.length; j++)
+		List<Double> rhoList = new ArrayList<>();
+		List<Double> thetaList = new ArrayList<>();
+		for(int j=0; j<accumHeight; j++)
 		{
-			for(int i=0; i<accumulator[j].length; i++)
+			for(int i=0; i<accumWidth; i++)
 			{
-				if(accumulator[j][i] > threshold)
+				int value = accumulator[j][i];
+				if(value > threshold)
 				{
-					lineCount++;
-					System.out.printf("(theta = %f, rho = %.2f)\n", j*deltaTheta, i*deltaRho);
+					boolean localMaxima = true;
+					
+					for(int dx=-1; dx<=1; dx++)
+					{
+						for(int dy=-1; dy<=1; dy++)
+						{
+							if(j+dy>=0 && j+dy<accumHeight && i+dx>=0 && i+dx<accumWidth && !(dx==0 && dy==0))
+							{
+								if(accumulator[j+dy][i+dx] > value)
+									localMaxima = false;
+							}
+						}
+					}
+
+					if(localMaxima)
+					{
+						rhoList.add((i-accumWidth/2)*deltaRho);
+						thetaList.add(j*deltaTheta);
+					}
 				}
 			}
 		}
 		
-		int index = 0;
-		double[][] lines = new double[lineCount][2];
-		for(int j=0; j<accumulator.length; j++)
+		double[][] lines = new double[rhoList.size()][2];
+		
+		System.out.println(rhoList.size());
+		for(int i=0; i<rhoList.size(); i++)
 		{
-			for(int i=0; i<accumulator[j].length; i++)
-			{
-				if(accumulator[j][i] > threshold)
-				{
-					lines[index][0] = j*deltaTheta;
-					lines[index][1] = i*deltaRho;
-				    index++;
-				}
-			}
+			double rho = rhoList.get(i);
+			double theta = thetaList.get(i);
+			//if(theta > Math.PI/2)
+				//rho *= -1;				
+			lines[i][0] = rho;
+			lines[i][1] = theta;
+			
+			System.out.printf("(rho = %.2f, theta = %.2f)\n", lines[i][0], lines[i][1]);
 		}
 		
 		return lines;
@@ -166,7 +249,7 @@ public class OpenCVTest
 	static double originToLineDistance(double x1, double y1, double x2 ,double y2)
 	{
 		double dx = x2-x1, dy = y2-y1;
-		double numer = Math.abs(x2*y1 - y2*x1);
+		double numer = x2*y1 - y2*x1;
 		double denom = Math.sqrt(dx*dx + dy*dy);		
 		return numer / denom;
 	}
