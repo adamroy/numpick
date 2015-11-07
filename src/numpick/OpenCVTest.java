@@ -72,8 +72,8 @@ public class OpenCVTest
 	public static void main(String[] args)
 	{
 		System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
-		//Mat raw = Imgcodecs.imread("pictures/lineTest.png");
-		Mat raw = Imgcodecs.imread("pictures/toothpicks.jpg");
+		Mat raw = Imgcodecs.imread("pictures/lineTest.png");
+		//Mat raw = Imgcodecs.imread("pictures/toothpicks.jpg");
 				
 		ImageProcess preProcessor = new ImageProcess(gray, blur, canny);
 		Mat preProcessedImage = preProcessor.process(raw);
@@ -88,8 +88,9 @@ public class OpenCVTest
 			if(customHough)
 			{	
 				AtomicReference<int[][]> accumulatorRef = new AtomicReference<>();
-				double[][] lineArray = HoughLines(preProcessedImage, 1, Math.PI/360, 0, 0, 100, 3, accumulatorRef);
+				double[][] lineArray = HoughLines(preProcessedImage, 1, Math.PI/180, 1, 20, 150, 10, accumulatorRef);
 				
+				/*
 				int[][] accumulatorArray = accumulatorRef.get();
 				Mat accumulator = new Mat(accumulatorArray.length, accumulatorArray[0].length, CvType.CV_8U);
 				{
@@ -106,6 +107,7 @@ public class OpenCVTest
 					accumulator = eqHist.process(accumulator);
 					Imgcodecs.imwrite(outputFolder+"accumulator"+suffix+".png", accumulator);
 				}
+				*/
 				
 				for(int i=0; i<lineArray.length; i++)
 				{
@@ -177,12 +179,20 @@ public class OpenCVTest
 		return out;
 	}
 	
-	static double[][] HoughLines(Mat image, double deltaRho, double deltaTheta, double width, double maxWidth, int threshold, int maximaRadius, AtomicReference<int[][]> accumulatorOut)
+	static double[][] HoughLines(Mat image, double deltaRho, double deltaTheta, double deltaWidth, double maxWidth, int threshold, int maximaRadius, AtomicReference<int[][]> accumulatorOut)
 	{
-		int maxDim = (int)(Math.max(image.width(), image.height())/deltaRho);
+		// Dim 1, height: theta
+		// Dim 2, width: rho
+		// Dim 3, depth: width
+		
+		int maxDim = (int)((Math.max(image.width(), image.height())/deltaRho) + maxWidth); 
 		int accumWidth = (int)(maxDim * Math.sqrt(2)) * 2;
 		int accumHeight = (int)(Math.PI/deltaTheta);
-		int[][] accumulator = new int[accumHeight][accumWidth];
+		int accumDepth = (int)(maxWidth/deltaWidth) + 1;
+		int[][][] accumulator = new int[accumHeight][accumWidth][accumDepth];
+		
+		// Use to keep track of most likely width
+		int[] widthCount = new int[accumDepth];
 		
 		// Run the accumulator on all non-zero pixels
 		byte[] pixel = new byte[1];		
@@ -198,6 +208,7 @@ public class OpenCVTest
 					{
 						for(double theta=0; theta<Math.PI; theta+=deltaTheta)
 						{
+							// Computing the line through this pixel
 							double x = i,
 									y = j,
 									dx = Math.cos(Math.PI - theta) * 10,
@@ -207,13 +218,27 @@ public class OpenCVTest
 									rho = originToLineDistance(x, y, xp, yp);
 							
 							int thetaIndex = (int)Math.floor(theta / deltaTheta);
-							int rhoIndex = (int)Math.floor((rho)/deltaRho) + accumWidth/2;
-							accumulator[thetaIndex][rhoIndex] += 1;
+							
+							for(double width=-maxWidth; width<=maxWidth; width+=deltaWidth)
+							{
+								// The new rho in the center of the parallel lines
+								double rhoPrime = rho + width/2;
+								
+								int rhoIndex = (int)Math.floor((rhoPrime)/deltaRho) + accumWidth/2;
+								int widthIndex = (int)Math.floor(Math.abs(width)/deltaWidth);
+								accumulator[thetaIndex][rhoIndex][widthIndex] += 1;
+								widthCount[widthIndex] += 1;
+							}
 						}
 					}
 				}
 			}
 		}
+		
+		int maxWidthIndex = 0;
+		for(int k=0; k<accumDepth; k++)
+			if(widthCount[k] > widthCount[maxWidthIndex])
+				maxWidthIndex = k;
 		
 		// Extract the rho's and theta's from the accumulator
 		List<Double> rhoList = new ArrayList<>();
@@ -222,30 +247,39 @@ public class OpenCVTest
 		{
 			for(int i=0; i<accumWidth; i++)
 			{
-				int value = accumulator[j][i];
-				if(value > threshold)
+				for(int k=0; k<accumDepth; k++)
 				{
-					// Check to see if this point is a local maxima, as if it is not then the other point should be the line
-					// Prevents lines segment doubles
-					// r is the radius to check for local maxima
-					boolean localMaxima = true;
-					int r = maximaRadius;
-					for(int dx=-r; dx<=r; dx++)
+					int value = accumulator[j][i][k];
+					if(value > threshold)
 					{
-						for(int dy=-r; dy<=r; dy++)
+						// Check to see if this point is a local maxima, as if it is not then the other point should be the line
+						// Prevents lines segment doubles
+						// r is the radius to check for local maxima
+						boolean localMaxima = true;
+						int r = maximaRadius;
+						for(int dx=-r; dx<=r; dx++)
 						{
-							if(j+dy>=0 && j+dy<accumHeight && i+dx>=0 && i+dx<accumWidth && !(dx==0 && dy==0))
+							for(int dy=-r; dy<=r; dy++)
 							{
-								if(accumulator[j+dy][i+dx] > value)
-									localMaxima = false;
+								//for(int dz=-r*5; dz<=r*5; dz++)
+								{
+									if(j+dy>=0 && j+dy<accumHeight && 
+											i+dx>=0 && i+dx<accumWidth && 
+											//k+dz>=0 && k+dz<accumDepth && 
+										!(dx==0 && dy==0))
+									{
+										if(accumulator[j+dy][i+dx][k] > value)
+											localMaxima = false;
+									}
+								}
 							}
 						}
-					}
-					
-					if(localMaxima)
-					{
-						rhoList.add((i-accumWidth/2)*deltaRho);
-						thetaList.add(j*deltaTheta);
+						
+						if(localMaxima)
+						{
+							rhoList.add((i-accumWidth/2)*deltaRho);
+							thetaList.add(j*deltaTheta);
+						}
 					}
 				}
 			}
@@ -265,8 +299,8 @@ public class OpenCVTest
 		}
 
 		// Return accumulator if asked for
-		if(accumulatorOut != null)
-			accumulatorOut.set(accumulator);
+		// if(accumulatorOut != null)
+		//	accumulatorOut.set(accumulator);
 		return lines;
 	}
 	
