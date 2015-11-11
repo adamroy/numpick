@@ -72,8 +72,9 @@ public class OpenCVTest
 	public static void main(String[] args)
 	{
 		System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
-		Mat raw = Imgcodecs.imread("pictures/lineTest.png");
-		//Mat raw = Imgcodecs.imread("pictures/toothpicks.jpg");
+		Mat raw = Imgcodecs.imread("pictures/unityToothpicks_105.png");
+		// Mat raw = Imgcodecs.imread("pictures/lineTest.png");
+		// Mat raw = Imgcodecs.imread("pictures/toothpicks.jpg");
 				
 		ImageProcess preProcessor = new ImageProcess(gray, blur, canny);
 		Mat preProcessedImage = preProcessor.process(raw);
@@ -88,7 +89,13 @@ public class OpenCVTest
 			if(customHough)
 			{	
 				AtomicReference<int[][]> accumulatorRef = new AtomicReference<>();
-				double[][] lineArray = HoughLines(preProcessedImage, 1, Math.PI/180, 1, 20, 150, 10, accumulatorRef);
+				Point[] lineArray = HoughLines(preProcessedImage, 1, Math.PI/180, 1, 20, 200, 10, accumulatorRef);
+				
+				HieracrchicalClustering hierachicalClusterer =  new HieracrchicalClustering();
+				double maxRho = Math.max(preProcessedImage.width(), preProcessedImage.height()) * Math.sqrt(2);
+				int clusters = hierachicalClusterer.countClusters(lineArray, 0.015, maxRho, Math.PI);
+				
+				System.out.println("Clusters: " + clusters);				
 				
 				/*
 				int[][] accumulatorArray = accumulatorRef.get();
@@ -111,8 +118,9 @@ public class OpenCVTest
 				
 				for(int i=0; i<lineArray.length; i++)
 				{
-				      double[] vec = lineArray[i];
-				      double rho = vec[0], theta = vec[1];
+				      Point vec = lineArray[i];
+				      double rho = vec.x, theta = vec.y;
+				      // System.out.printf("(rho = %.2f, theta = %.2f)\n", rho, theta);
 				      double a = Math.cos(theta), b = Math.sin(theta);
 				      double x0 = a*rho, y0 = b*rho;
 				      Point start = new Point(x0 + 5000 * -b, y0 + 5000 * a);
@@ -122,7 +130,7 @@ public class OpenCVTest
 			}
 			else
 			{
-				Imgproc.HoughLines(preProcessedImage, lines, 1, Math.PI/180, 100);
+				Imgproc.HoughLines(preProcessedImage, lines, 1, Math.PI/180, 75);
 				
 				for(int i=0; i<lines.rows(); i++)
 				{
@@ -156,8 +164,6 @@ public class OpenCVTest
 			}
 		}
 		
-		
-		
 		//Mat all = combineMats(raw, gray, blur, canny, hough);
 		Imgcodecs.imwrite(outputFolder+"lines"+suffix+".png", hough);
 	}
@@ -179,7 +185,7 @@ public class OpenCVTest
 		return out;
 	}
 	
-	static double[][] HoughLines(Mat image, double deltaRho, double deltaTheta, double deltaWidth, double maxWidth, int threshold, int maximaRadius, AtomicReference<int[][]> accumulatorOut)
+	static Point[] HoughLines(Mat image, double deltaRho, double deltaTheta, double deltaWidth, double maxWidth, int threshold, int maximaRadius, AtomicReference<int[][]> accumulatorOut)
 	{
 		// Dim 1, height: theta
 		// Dim 2, width: rho
@@ -286,16 +292,13 @@ public class OpenCVTest
 		}
 		
 		// Package as a double array for easy consumption
-		double[][] lines = new double[rhoList.size()][2];
+		Point[] lines = new Point[rhoList.size()];
 		System.out.println(rhoList.size());
 		for(int i=0; i<rhoList.size(); i++)
 		{
 			double rho = rhoList.get(i);
 			double theta = thetaList.get(i);
-			lines[i][0] = rho;
-			lines[i][1] = theta;
-			
-			System.out.printf("(rho = %.2f, theta = %.2f)\n", rho, theta);
+			lines[i] = new Point(rho, theta);
 		}
 
 		// Return accumulator if asked for
