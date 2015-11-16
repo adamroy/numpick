@@ -7,19 +7,30 @@ import org.opencv.core.Point;
 
 public class HieracrchicalClustering
 {
-	private class Cluster
+	private static class Cluster
 	{
 		private List<Point> lines = new ArrayList<Point>();
+		private Point centroid;
 		
 		public Cluster(Point p)
 		{
 			lines.add(p);
+			centroid = p.clone();
 		}
 		
 		public Cluster(Cluster one, Cluster two)
 		{
 			lines.addAll(one.lines);
 			lines.addAll(two.lines);
+			
+			double rhoSum = 0, thetaSum = 0;
+			for(Point p : lines)
+			{
+				rhoSum += p.x;
+				thetaSum += p.y;
+			}
+			
+			centroid = new Point(rhoSum / lines.size(), thetaSum / lines.size());
 		}
 		
 		public double distance(Cluster other)
@@ -27,6 +38,9 @@ public class HieracrchicalClustering
 			if(this == other)
 				return Double.POSITIVE_INFINITY;
 			
+			return HieracrchicalClustering.distance(this.centroid, other.centroid);
+			
+			/*
 			double minDistance = Double.POSITIVE_INFINITY;
 			for(Point p1 : this.lines)
 			{
@@ -39,6 +53,7 @@ public class HieracrchicalClustering
 			}
 			
 			return minDistance;
+			*/
 		}
 	}
 	
@@ -53,7 +68,7 @@ public class HieracrchicalClustering
 	 * @param maxTheta largest value theta can take
 	 * @return the estimated number of distinct clusters
 	 */
-	public int countClusters(Point[] lines, double maxDistanceInCluster, double maxRho, double maxTheta)
+	public static int countClusters(Point[] lines, double maxDistanceInCluster, double maxRho, double maxTheta)
 	{
 		// Construct initial clusters containing one point
 		List<Cluster> clusters = new ArrayList<HieracrchicalClustering.Cluster>();

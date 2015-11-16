@@ -1,17 +1,24 @@
 package numpick;
 
+import java.io.BufferedReader;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
+
+import numpick.ParameterizedGeneticAlgorithm.Evaluator;
+import numpick.ParameterizedGeneticAlgorithm.Parameter;
+
 import org.opencv.core.Core;
-import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.core.Point;
-import org.opencv.core.Range;
 import org.opencv.core.Scalar;
 import org.opencv.core.Size;
 import org.opencv.imgcodecs.Imgcodecs;
 import org.opencv.imgproc.Imgproc;
 
-public class OpenCVTest
+public class Numpick
 {
+	static boolean pictureOutput = false;
 	static String outputFolder = "processedPictures/";
 	static String suffix = "";
 	
@@ -22,7 +29,8 @@ public class OpenCVTest
 		{
 			Mat gray = new Mat();
 			Imgproc.cvtColor(src, gray, Imgproc.COLOR_BGR2GRAY);
-			Imgcodecs.imwrite(outputFolder+"gray"+suffix+".png", gray);
+			if(pictureOutput)
+				Imgcodecs.imwrite(outputFolder+"gray"+suffix+".png", gray);
 			return gray;
 		}
 	};
@@ -34,7 +42,8 @@ public class OpenCVTest
 		{
 			Mat eqHist = new Mat();
 			Imgproc.equalizeHist(src, eqHist);
-			Imgcodecs.imwrite(outputFolder+"eqHist"+suffix+".png", eqHist);
+			if(pictureOutput)
+				Imgcodecs.imwrite(outputFolder+"eqHist"+suffix+".png", eqHist);
 			return eqHist;
 		}
 	};
@@ -46,7 +55,8 @@ public class OpenCVTest
 		{
 			Mat blur = new Mat();
 			Imgproc.blur(src, blur, new Size(3, 3));
-			Imgcodecs.imwrite(outputFolder+"blur"+suffix+".png", blur);
+			if(pictureOutput) 
+				Imgcodecs.imwrite(outputFolder+"blur"+suffix+".png", blur);
 			return blur;
 		}
 	};
@@ -59,24 +69,78 @@ public class OpenCVTest
 			int lowThreshold = 50;
 			Mat canny = new Mat();
 			Imgproc.Canny(src, canny, lowThreshold, lowThreshold*3);
-			Imgcodecs.imwrite(outputFolder+"canny"+suffix+".png", canny);
+			if(pictureOutput) 
+				Imgcodecs.imwrite(outputFolder+"canny"+suffix+".png", canny);
 			return canny;
 		}
 	};
-	
+
 	public static void main(String[] args)
 	{
 		System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
-		Mat raw = Imgcodecs.imread("pictures/unityToothpicks_34.png");
-		// Mat raw = Imgcodecs.imread("pictures/lineTest.png");
-		// Mat raw = Imgcodecs.imread("pictures/toothpicks.jpg");
+		
+		Parameter threshold = new Parameter("threshold", 100, 2);
+		
+		Parameter[] params = ParameterizedGeneticAlgorithm.run(0.7, new Evaluator()
+		{
+			
+			public double evaluate(Parameter[] parameters)
+			{
+				int threshold = 0;
+				if(parameters[0].name.equals("threshold"))
+					threshold = Math.max(0, (int)parameters[0].value);
 				
+				try
+				{
+					BufferedReader reader = new BufferedReader(new FileReader("unityPictures/toothpickCounts.txt"));
+					int correctCount = 0;
+					int totalCount = 0;
+					
+					for(int i=0; i<5; i++)
+					{
+						String line = reader.readLine();
+						String filename = line.substring(0, 40);
+						int actualToothpicks = Integer.parseInt(line.substring(41));
+						int estimatedToothpicks = countToothpicks("unityPictures/" + filename, threshold);
+						
+						if(Math.abs(actualToothpicks - estimatedToothpicks) < 2)
+							correctCount++;
+						totalCount++;
+					}
+					
+					reader.close();
+					
+					double fitness = (double)correctCount/totalCount; 
+					System.out.printf("%.2f\n", fitness);
+					return fitness;
+				}
+				catch (Exception e)
+				{
+					e.printStackTrace();
+				}
+				
+				return 0;
+			}
+		}, threshold);
+		
+		for(int i=0; i<params.length; i++)
+		{
+			System.out.println(params[i]);
+		}
+	}
+	
+	
+	public static int countToothpicks(String filename, int threshold)
+	{
+		Mat raw = Imgcodecs.imread(filename);				
 		ImageProcess preProcessor = new ImageProcess(gray, blur, canny);
 		Mat preProcessedImage = preProcessor.process(raw);
 		
 		Mat lines = new Mat();
 		Mat hough = raw.clone();
 		boolean prob = false;
+		
+		int count = 0;
 		
 		if(!prob)
 		{
@@ -88,8 +152,7 @@ public class OpenCVTest
 				Point[] lineArray = HoughParallelLines.run(preProcessedImage, 1, Math.PI/180, 1, 20, 150, 10);
 				
 				double maxRho = Math.max(preProcessedImage.width(), preProcessedImage.height()) * Math.sqrt(2);
-				int clusters = HieracrchicalClustering.countClusters(lineArray, 0.015, maxRho, Math.PI);
-				System.out.println("Clusters: " + clusters);
+				count = HieracrchicalClustering.countClusters(lineArray, 0.015, maxRho, Math.PI);
 				
 				/*
 				int[][] accumulatorArray = accumulatorRef.get();
@@ -125,11 +188,10 @@ public class OpenCVTest
 			}
 			else
 			{
-				Imgproc.HoughLines(preProcessedImage, lines, 1, Math.PI/180, 75);
+				Imgproc.HoughLines(preProcessedImage, lines, 1, Math.PI/180, threshold);
 				
 				double maxRho = Math.max(preProcessedImage.width(), preProcessedImage.height()) * Math.sqrt(2);
-				int clusters = HieracrchicalClustering.countClusters(makePoints(lines), 0.015, maxRho, Math.PI);
-				System.out.println("Clusters: " + clusters);
+				count = HieracrchicalClustering.countClusters(makePoints(lines), 0.015, maxRho, Math.PI);
 				
 				for(int i=0; i<lines.rows(); i++)
 				{
@@ -164,27 +226,11 @@ public class OpenCVTest
 			}
 		}
 		
-		//Mat all = combineMats(raw, gray, blur, canny, hough);
-		Imgcodecs.imwrite(outputFolder+"lines"+suffix+".png", hough);
+		if(pictureOutput)
+			Imgcodecs.imwrite(outputFolder+"lines"+suffix+".png", hough);
+		
+		return count;
 	}
-	
-	static Mat combineMats(Mat ...mats)
-	{	
-		int n = mats.length;
-		int row = mats[0].rows();
-		int col = mats[0].cols();
-		
-		Mat out = new Mat(row * n, col, CvType.CV_16UC3);
-		
-		for(int i=0; i<n; i++)
-		{
-			Range range = new Range(i*row, (i+1)*row);
-			out.rowRange(range).setTo(mats[i]);
-		}
-		
-		return out;
-	}
-
 	
 	static Point[] makePoints(Mat lines)
 	{
@@ -197,5 +243,5 @@ public class OpenCVTest
 		}
 		return points;
 	}
-}
 
+}
