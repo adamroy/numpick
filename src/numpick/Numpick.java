@@ -79,16 +79,26 @@ public class Numpick
 	{
 		System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
 		
-		Parameter threshold = new Parameter("threshold", 100, 2);
+		Parameter houghThreshold = new Parameter("houghThreshold", 50, 150, 2);
+		Parameter splitThreshold = new Parameter("splitThreshold", 0.005, 0.03, 0.001);
 		
-		Parameter[] params = ParameterizedGeneticAlgorithm.run(0.7, new Evaluator()
+		Parameter[] params = ParameterizedGeneticAlgorithm.run(20, 1.0, new Evaluator()
 		{
 			
 			public double evaluate(Parameter[] parameters)
 			{
-				int threshold = 0;
-				if(parameters[0].name.equals("threshold"))
-					threshold = Math.max(0, (int)parameters[0].value);
+				int houghThreshold = 0;
+				double splitThreshold = 0;
+				
+				if(parameters[0].name.equals("houghThreshold"))
+					houghThreshold = (int)parameters[0].value;
+				if(parameters[1].name.equals("splitThreshold"))
+					splitThreshold = parameters[1].value;
+				
+				for(int i=0; i<parameters.length; i++)
+				{
+					System.out.print(parameters[i] + " ");
+				}
 				
 				try
 				{
@@ -96,12 +106,12 @@ public class Numpick
 					int correctCount = 0;
 					int totalCount = 0;
 					
-					for(int i=0; i<5; i++)
+					for(int i=0; i<10; i++)
 					{
 						String line = reader.readLine();
 						String filename = line.substring(0, 40);
 						int actualToothpicks = Integer.parseInt(line.substring(41));
-						int estimatedToothpicks = countToothpicks("unityPictures/" + filename, threshold);
+						int estimatedToothpicks = countToothpicks("unityPictures/" + filename, houghThreshold, splitThreshold);
 						
 						if(Math.abs(actualToothpicks - estimatedToothpicks) < 2)
 							correctCount++;
@@ -111,7 +121,7 @@ public class Numpick
 					reader.close();
 					
 					double fitness = (double)correctCount/totalCount; 
-					System.out.printf("%.2f\n", fitness);
+					System.out.printf("Fitness: %.2f\n", fitness);
 					return fitness;
 				}
 				catch (Exception e)
@@ -121,16 +131,18 @@ public class Numpick
 				
 				return 0;
 			}
-		}, threshold);
+		}, houghThreshold, splitThreshold);
 		
 		for(int i=0; i<params.length; i++)
 		{
 			System.out.println(params[i]);
 		}
+		
+		// System.out.println(countToothpicks("pictures/unityToothpicks_23.png", 150));
 	}
 	
 	
-	public static int countToothpicks(String filename, int threshold)
+	public static int countToothpicks(String filename, int houghThreshold, double splitThreshold)
 	{
 		Mat raw = Imgcodecs.imread(filename);				
 		ImageProcess preProcessor = new ImageProcess(gray, blur, canny);
@@ -152,7 +164,7 @@ public class Numpick
 				Point[] lineArray = HoughParallelLines.run(preProcessedImage, 1, Math.PI/180, 1, 20, 150, 10);
 				
 				double maxRho = Math.max(preProcessedImage.width(), preProcessedImage.height()) * Math.sqrt(2);
-				count = HieracrchicalClustering.countClusters(lineArray, 0.015, maxRho, Math.PI);
+				count = HieracrchicalClustering.countClusters(lineArray, splitThreshold, maxRho, Math.PI);
 				
 				/*
 				int[][] accumulatorArray = accumulatorRef.get();
@@ -188,7 +200,7 @@ public class Numpick
 			}
 			else
 			{
-				Imgproc.HoughLines(preProcessedImage, lines, 1, Math.PI/180, threshold);
+				Imgproc.HoughLines(preProcessedImage, lines, 1, Math.PI/180, houghThreshold);
 				
 				double maxRho = Math.max(preProcessedImage.width(), preProcessedImage.height()) * Math.sqrt(2);
 				count = HieracrchicalClustering.countClusters(makePoints(lines), 0.015, maxRho, Math.PI);

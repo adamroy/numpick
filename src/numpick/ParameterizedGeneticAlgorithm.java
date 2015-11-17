@@ -27,19 +27,16 @@ public class ParameterizedGeneticAlgorithm
 			
 			for(int i=0; i<size; i++)
 			{
-				Parameter[] individual = new Parameter[prototypes.length];
 				for(int j=0; j<prototypes.length; j++)
 				{
-					individual[j] = prototypes[j].clone();
-					individual[j].mutate();
-					individual[j].mutate();
-					individual[j].mutate();
+					population[i][j] = prototypes[j].clone();
+					tempPopulation[i][j] = prototypes[j].clone();
+					population[i][j].initialize();
 				}
-				
-				population[i] = individual;
 			}
 			
 			best = 0;
+			bestFitness = 0;
 		}
 		
 		public void select()
@@ -50,9 +47,10 @@ public class ParameterizedGeneticAlgorithm
 				cumulativeFitnesses[i+1] = cumulativeFitnesses[i] + fitnesses[i];
 			}
 			
-			System.arraycopy(population, 0, tempPopulation, 0, size);
-			
-			population[0] = tempPopulation[best].clone();
+			for(int i=0; i<population[0].length; i++)
+			{
+				tempPopulation[0][i].copy(population[best][i].clone());
+			}
 			best = 0;
 			
 			for(int i=1; i<size; i++)
@@ -60,10 +58,21 @@ public class ParameterizedGeneticAlgorithm
 				double val = rand.nextDouble() * cumulativeFitnesses[size];
 				int index = Arrays.binarySearch(cumulativeFitnesses, val);
 				if(index < 0)
-					index = -index - 1;
+					index = (-index - 1) - 1;
+				if(index < 0)
+					index = 0;
+				if(index >= size)
+					index = size-1;
 				
-				population[i] = tempPopulation[index].clone();
+				for(int j=0; j<population[0].length; j++)
+				{
+					tempPopulation[i][j].copy(population[index][j]);
+				}
 			}
+			
+			Parameter[][] holder = population;
+			population = tempPopulation;
+			tempPopulation = holder;
 		}
 		
 		public void crossover()
@@ -140,18 +149,29 @@ public class ParameterizedGeneticAlgorithm
 		String name;
 		double value;
 		double changeRate;
+		double start, end;
 		
-		public Parameter(String name, double initialValue, double changeRate)
+		public Parameter(String name, double start, double end, double changeRate)
 		{
 			this.name = name;
-			this.value = initialValue;
 			this.changeRate = changeRate;
+			this.start = start;
+			this.end = end;
+		}
+		
+		public void initialize()
+		{
+			this.value = start + (end - start) * rand.nextDouble();
 		}
 		
 		public void mutate()
 		{
-			int r = rand.nextInt(10) - 5;
+			double r = rand.nextGaussian();
 			value += changeRate * r;
+			if(value < start)
+				value = start;
+			if(value > end)
+				value = end;
 		}
 		
 		public void copy(Parameter other)
@@ -161,7 +181,9 @@ public class ParameterizedGeneticAlgorithm
 		
 		public Parameter clone()
 		{
-			return new Parameter(name, value, changeRate);
+			Parameter p  = new Parameter(name, start, end, changeRate);
+			p.value = this.value;
+			return p; 
 		}
 		
 		public double getValue()
@@ -172,18 +194,20 @@ public class ParameterizedGeneticAlgorithm
 		@Override
 		public String toString()
 		{
-			return name + ": " + value;
+			return String.format("%s: %.2f",  name, value);
 		}
 	}
 	
-	public static Parameter[] run(double targetFitness, Evaluator evaluator, Parameter... params)
+	public static Parameter[] run(int populationSize, double targetFitness, Evaluator evaluator, Parameter... params)
 	{
 		Population population = new Population();
-		population.initialize(100, params);
+		population.initialize(populationSize, params);
 		population.evaluate(evaluator);
 		
+		int gen = 0;
 		while(population.getFitness() < targetFitness)
 		{
+			System.out.printf("Generation %d\n", gen++);
 			population.select();
 			population.crossover();
 			population.mutate();

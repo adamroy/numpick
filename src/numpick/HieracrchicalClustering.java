@@ -70,6 +70,9 @@ public class HieracrchicalClustering
 	 */
 	public static int countClusters(Point[] lines, double maxDistanceInCluster, double maxRho, double maxTheta)
 	{
+		if(lines.length == 0)
+			return 0;
+		
 		// Construct initial clusters containing one point
 		List<Cluster> clusters = new ArrayList<HieracrchicalClustering.Cluster>();
 		for(int i=0; i<lines.length; i++)
