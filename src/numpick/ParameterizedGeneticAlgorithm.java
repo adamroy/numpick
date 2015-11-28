@@ -194,7 +194,7 @@ public class ParameterizedGeneticAlgorithm
 		@Override
 		public String toString()
 		{
-			return String.format("%s: %.2f",  name, value);
+			return String.format("%s: %.4f",  name, value);
 		}
 	}
 	
