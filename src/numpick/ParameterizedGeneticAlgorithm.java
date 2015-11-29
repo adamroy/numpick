@@ -1,7 +1,10 @@
 package numpick;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Random;
+import java.util.concurrent.locks.Lock;
 
 public class ParameterizedGeneticAlgorithm
 {
@@ -116,10 +119,31 @@ public class ParameterizedGeneticAlgorithm
 		}
 		
 		public void evaluate(Evaluator evaluator)
-		{
+		{			
+			// Thread the evaluation to speed it up
+			InidividualEvaluationThread[] thread = new InidividualEvaluationThread[size];
+			
 			for(int i=0; i<size; i++)
 			{
-				fitnesses[i] = evaluator.evaluate(population[i]);
+				thread[i] = new InidividualEvaluationThread(population[i], evaluator);
+				thread[i].start();
+			}
+			
+			for(int i=0; i<size; i++)
+			{
+				try
+				{
+					thread[i].join();
+				} 
+				catch (InterruptedException e)
+				{
+					e.printStackTrace();
+				}
+			}
+			
+			for(int i=0; i<size; i++)
+			{
+				fitnesses[i] = thread[i].getFitness();
 				if(fitnesses[i] > bestFitness)
 				{
 					best = i;
@@ -136,6 +160,30 @@ public class ParameterizedGeneticAlgorithm
 		public Parameter[] getBest()
 		{
 			return population[best];
+		}
+		
+		private class InidividualEvaluationThread extends Thread
+		{
+			private Parameter[] individual;
+			private Evaluator eval;
+			private double fitness;
+			
+			public InidividualEvaluationThread(Parameter[] individual, Evaluator eval)
+			{
+				this.individual = individual;
+				this.eval = eval;
+			}
+
+			@Override
+			public void run()
+			{
+				fitness = eval.evaluate(individual);
+			}
+			
+			public double getFitness()
+			{
+				return fitness;
+			}
 		}
 	}
 	

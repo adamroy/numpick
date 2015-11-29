@@ -10,6 +10,9 @@ import java.util.List;
 import numpick.ParameterizedGeneticAlgorithm.Evaluator;
 import numpick.ParameterizedGeneticAlgorithm.Parameter;
 
+import org.neuroph.nnet.Hopfield;
+import org.neuroph.nnet.learning.HopfieldLearning;
+import org.neuroph.util.NeuronProperties;
 import org.opencv.core.Core;
 import org.opencv.core.Mat;
 import org.opencv.core.Point;
@@ -24,6 +27,17 @@ public class Numpick
 	{
 		System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
 		
+		// Harness for testing one picture
+		{
+			
+			Mat img = ImagePreprocessor.processImage("pictures/20151104_155658.jpg");
+			// Mat img = ImagePreprocessor.processImage("unityPictures/0b969439-77d2-47ea-81ee-ff37b7b7ab62.png");
+			int count = countToothpicks(img, 84, 0.0237);
+			// 28
+			System.out.println("Count: " + count);
+		}
+		
+		/*
 		// Build the data for the GA
 		final List<Mat> images = new ArrayList<Mat>();
 		final List<Integer> counts = new ArrayList<Integer>();
@@ -42,6 +56,9 @@ public class Numpick
 					images.add(image);
 					counts.add(actualToothpicks);
 				}
+				
+				if(images.size() >= 500)
+					break;
 			}
 			reader.close();
 			
@@ -53,8 +70,9 @@ public class Numpick
 
 		System.out.println("Image processing done.");
 		
-		Parameter houghThreshold = new Parameter("houghThreshold", 50, 150, 2);
+		Parameter houghThreshold = new Parameter("houghThreshold", 80, 150, 2);
 		Parameter splitThreshold = new Parameter("splitThreshold", 0.005, 0.03, 0.001);
+		//Parameter splitThreshold = new Parameter("splitThreshold", 1, 2, 0.05);
 		
 		Parameter[] params = ParameterizedGeneticAlgorithm.run(20, 0.9, new Evaluator()
 		{
@@ -75,11 +93,11 @@ public class Numpick
 
 				int n = images.size();	
 				double fitness = 0;
-				for(int i=0; i<10; i++)
+				for(int i=0; i<n; i++)
 				{
 					int estimatedToothpicks = countToothpicks(images.get(i), houghThreshold, splitThreshold);
 					int difference = Math.abs(estimatedToothpicks - counts.get(i));
-					fitness += 1 - (float)difference/counts.get(i);
+					fitness += 1 / ((float)difference/counts.get(i) + 1);
 				}
 				
 				fitness /= n; 
@@ -92,6 +110,7 @@ public class Numpick
 		{
 			System.out.println(params[i]);
 		}
+		*/
 	}
 	
 	
@@ -105,7 +124,8 @@ public class Numpick
 			Point[] lineArray = HoughParallelLines.run(preProcessedImage, 1, Math.PI/180, 1, 20, 150, 10);
 			
 			double maxRho = Math.max(preProcessedImage.width(), preProcessedImage.height()) * Math.sqrt(2);
-			count = HieracrchicalClustering.countClusters(lineArray, splitThreshold, maxRho, Math.PI);
+			count = HierarchicalClustering.countClusters(lineArray, splitThreshold, maxRho, Math.PI);
+			count = HierarchicalClustering.countClusters(lineArray, splitThreshold, maxRho, Math.PI);
 		}
 		else
 		{
@@ -113,7 +133,7 @@ public class Numpick
 			Imgproc.HoughLines(preProcessedImage, lines, 1, Math.PI/180, houghThreshold);
 			
 			double maxRho = Math.max(preProcessedImage.width(), preProcessedImage.height()) * Math.sqrt(2);
-			count = HieracrchicalClustering.countClusters(makePoints(lines), 0.015, maxRho, Math.PI);
+			count = HierarchicalClustering.countClusters(makePoints(lines), splitThreshold, maxRho, Math.PI);
 		}
 		
 		return count;

@@ -7,7 +7,7 @@ import org.opencv.imgproc.Imgproc;
 
 public class ImagePreprocessor
 {
-	static boolean pictureOutput = false;
+	static boolean pictureOutput = true;
 	static String outputFolder = "processedPictures/";
 	static String suffix = "";
 	
@@ -64,12 +64,47 @@ public class ImagePreprocessor
 		}
 	};
 	
+	static ImageProcessor resize = new ImageProcessor()
+	{
+		@Override
+		public Mat process(Mat src)
+		{
+			int size = 700;
+			// Resize so larger dimension is size
+			int dim = Math.max(src.width(), src.height());
+			
+			if(dim < size) 
+				return src;
+			
+			float scale = (float)size/dim;
+			int width = (int)(scale * src.width());
+			int height = (int)(scale * src.height());
+			
+			Mat dst = new Mat();
+			Imgproc.resize(src, dst, new Size(width, height));
+			if(pictureOutput) 
+				Imgcodecs.imwrite(outputFolder+"resize"+suffix+".png", dst);
+			return dst;
+		}
+	};
+	
 	public static Mat processImage(String filename)
 	{
-		
-		Mat raw = Imgcodecs.imread(filename);				
-		ImageProcess preProcessor = new ImageProcess(gray, blur, canny);
-		Mat preProcessedImage = preProcessor.process(raw);
-		return preProcessedImage;
+		try
+		{
+			Mat raw = Imgcodecs.imread(filename);
+			if(pictureOutput) 
+			{
+				Imgcodecs.imwrite(outputFolder+"raw"+suffix+".png", raw);
+				System.out.println(filename);
+			}
+			ImageProcess preProcessor = new ImageProcess(resize, gray, blur, canny);
+			Mat preProcessedImage = preProcessor.process(raw);
+			return preProcessedImage;
+		}
+		catch(Exception e)
+		{
+			return null;
+		}
 	}
 }

@@ -4,8 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.opencv.core.Point;
+import org.opencv.core.Point3;
 
-public class HieracrchicalClustering
+public class HierarchicalClustering
 {
 	private static class Cluster
 	{
@@ -30,6 +31,11 @@ public class HieracrchicalClustering
 				thetaSum += p.y;
 			}
 			
+			/*double oneRatio = (double)one.lines.size()/lines.size();
+			double twoRatio = (double)two.lines.size()/lines.size();
+			centroid = new Point(one.centroid.x *  oneRatio + two.centroid.x * twoRatio, one.centroid.y *  oneRatio + two.centroid.y * twoRatio);
+			*/
+			
 			centroid = new Point(rhoSum / lines.size(), thetaSum / lines.size());
 		}
 		
@@ -38,22 +44,7 @@ public class HieracrchicalClustering
 			if(this == other)
 				return Double.POSITIVE_INFINITY;
 			
-			return HieracrchicalClustering.distance(this.centroid, other.centroid);
-			
-			/*
-			double minDistance = Double.POSITIVE_INFINITY;
-			for(Point p1 : this.lines)
-			{
-				for(Point p2 : other.lines)
-				{
-					double d = HieracrchicalClustering.distance(p1, p2); 
-					if(d < minDistance)
-						minDistance = d;
-				}
-			}
-			
-			return minDistance;
-			*/
+			return HierarchicalClustering.distance(this.centroid, other.centroid);
 		}
 	}
 	
@@ -72,14 +63,22 @@ public class HieracrchicalClustering
 	{
 		if(lines.length == 0)
 			return 0;
+		if(lines.length == 1)
+			return 1;
+		
+		double[] d0 = new double[lines.length - 1];
+		double[] runningAverage = new double[lines.length - 1];
+		double[] d1 = new double[lines.length - 2];
 		
 		// Construct initial clusters containing one point
-		List<Cluster> clusters = new ArrayList<HieracrchicalClustering.Cluster>();
+		List<Cluster> clusters = new ArrayList<HierarchicalClustering.Cluster>();
 		for(int i=0; i<lines.length; i++)
 		{
 			Point normalizedPoint = new Point(lines[i].x / maxRho, lines[i].y / maxTheta);
 			clusters.add(new Cluster(normalizedPoint));
 		}
+
+		int distIndex = 0;
 		
 		while(true)
 		{
@@ -106,8 +105,11 @@ public class HieracrchicalClustering
 			
 			if(minimumDistance != Double.POSITIVE_INFINITY && minimumDistance > maxDistanceInCluster)
 			{
-				return clusters.size();
+				int size = clusters.size(); 
+				return size;
 			}
+			
+			d0[distIndex++] = minimumDistance;
 			
 			if(minimumDistance != Double.POSITIVE_INFINITY && mi != -1 && mj != -1)
 			{
@@ -119,6 +121,30 @@ public class HieracrchicalClustering
 			
 			if(clusters.size() == 1)
 			{
+				// System.out.print("\nd0: ");
+				for(int i=0; i<d0.length; i++)
+				{
+					// System.out.print(d0[i] + ", ");
+					
+					// Exponential smoothing
+					if(i == 0)
+					{
+						runningAverage[i] = d0[i];
+					}
+					else
+					{
+						double t = 0.4f;
+						runningAverage[i] = d0[i] * t + runningAverage[i-1] * (1 - t);
+					}
+					
+					if(i > 0 && d0[i]/runningAverage[i-1] > maxDistanceInCluster)
+					{
+						int difference = d0.length - i;
+ 						// System.out.println(difference);
+ 						return difference;
+					}
+				}
+				
 				return 1;
 			}
 		}
@@ -132,5 +158,6 @@ public class HieracrchicalClustering
 		double dx = p1.x - p2.x;
 		double dy = p1.y - p2.y;
 		return Math.sqrt(dx*dx + dy*dy);
+		// return Math.abs(p1.x - p2.x) + Math.abs(p1.y - p2.y);
 	}
 }

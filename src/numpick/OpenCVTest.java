@@ -88,7 +88,7 @@ public class OpenCVTest
 				Point[] lineArray = HoughParallelLines.run(preProcessedImage, 1, Math.PI/180, 1, 20, 150, 10);
 				
 				double maxRho = Math.max(preProcessedImage.width(), preProcessedImage.height()) * Math.sqrt(2);
-				int clusters = HieracrchicalClustering.countClusters(lineArray, 0.015, maxRho, Math.PI);
+				int clusters = HierarchicalClustering.countClusters(lineArray, 0.015, maxRho, Math.PI);
 				System.out.println("Clusters: " + clusters);
 				
 				/*
@@ -128,7 +128,7 @@ public class OpenCVTest
 				Imgproc.HoughLines(preProcessedImage, lines, 1, Math.PI/180, 75);
 				
 				double maxRho = Math.max(preProcessedImage.width(), preProcessedImage.height()) * Math.sqrt(2);
-				int clusters = HieracrchicalClustering.countClusters(makePoints(lines), 0.015, maxRho, Math.PI);
+				int clusters = HierarchicalClustering.countClusters(makePoints(lines), 0.015, maxRho, Math.PI);
 				System.out.println("Clusters: " + clusters);
 				
 				for(int i=0; i<lines.rows(); i++)
