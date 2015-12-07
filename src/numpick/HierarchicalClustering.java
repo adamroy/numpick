@@ -82,7 +82,8 @@ public class HierarchicalClustering
 			return 0;
 		if(lines.length == 1)
 		{
-			finalLines.add(lines[0]);
+			if(finalLines != null)
+				finalLines.add(lines[0]);
 			return 1;
 		}
 		

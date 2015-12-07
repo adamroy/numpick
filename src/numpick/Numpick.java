@@ -26,9 +26,9 @@ public class Numpick
 	{
 		System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
 		
-		pictureTest();
+		// pictureTest();
 		// trainWithGA();
-		// test();
+		test();
 	}
 	
 	// Harness for testing one picture
@@ -40,102 +40,30 @@ public class Numpick
 		AtomicReference<Double> dataPercent = new AtomicReference<Double>();
 		//Mat img = ImagePreprocessor.processImage("pictures/miscount.png", raw, dataPercent);
 		List<Point> normalLines = new ArrayList<Point>();
-		Mat img = ImagePreprocessor.processImage("unityPictures/9428b77c-51c4-407f-b885-6416427c1d86.png", raw, dataPercent);
-		int count = countToothpicks(img, 80, 0.0236, dataPercent.get(), raw, normalLines);
+		Mat img = ImagePreprocessor.processImage("unityPictures/2f9778a4-9b76-495f-8d55-1e714615b958.png", raw, dataPercent);
+		
+		Mat cw = new Mat();
+		img.copyTo(cw);;
+		Core.transpose(cw, cw);
+		Core.flip(cw, cw, 1);
+		
+		int count = countToothpicks(img, cw, 80, 0.0236, dataPercent.get(), raw, normalLines);
 		System.out.println("Count: " + count);
+	}
+	
+	static void transformLineCW(Point p, double cwImageWidth)
+	{
+		double rho = p.x;
+		double theta = p.y;
+		double h = rho / Math.cos(Math.PI - theta);
+		double rhoPrime = (h + cwImageWidth) * rho / h;
+		double thetaPrime = theta > Math.PI/2 ? theta - Math.PI/2 : theta + Math.PI/2;
+		double x = h / Math.cos(theta);
+		if (thetaPrime > Math.PI/2 && rho > x)
+			rhoPrime *= -1;
 		
-		Core.transpose(img, img);
-		Core.flip(img, img, 1);
-		
-		Core.transpose(raw, raw);
-		Core.flip(raw, raw, 1);
-		
-		List<Point> cwLines = new ArrayList<Point>();
-		count = countToothpicks(img, 80, 0.0236, dataPercent.get(), raw, cwLines);
-		System.out.println("90 CW Count: " + count);
-		
-		
-		List<Point> transformedLines = new ArrayList<Point>();
-		int w = img.width();
-		for(Point p : cwLines)
-		{
-			double rho = p.x;
-			double theta = p.y;
-			double h = rho / Math.cos(Math.PI - theta);
-			double rhoPrime = (h + w) * rho / h;
-			double thetaPrime = theta > Math.PI/2 ? theta - Math.PI/2 : theta + Math.PI/2;
-			double x = h / Math.cos(theta);
-			if (thetaPrime > Math.PI/2 && rho > x)
-				rhoPrime *= -1;
-			
-			// System.out.printf("Rho': %.2f, Theta': %.2f\n", rhoPrime, thetaPrime);
-			transformedLines.add(new Point(rhoPrime, thetaPrime));
-		}
-		
-		
-		
-		List<Point> longer = normalLines.size() > transformedLines.size() ? normalLines : transformedLines;
-		List<Point> shorter = normalLines.size() < transformedLines.size() ? normalLines : transformedLines;
-		List<Point> union = new ArrayList<Point>();
-		
-		/*
-		while(!longer.isEmpty())
-		{
-			Point p = longer.remove(longer.size()-1);
-			boolean matchFound = false;
-			for(int i=0; i<shorter.size(); i++)
-			{
-				Point o = shorter.get(i);
-				if(approx(p.x, o.x, 6) && approx(p.y, o.y, 0.03))
-				{
-					union.add(p);
-					shorter.remove(i);
-					matchFound = true;
-					break;
-				}
-			}
-			
-			if(!matchFound)
-				union.add(p);
-		}
-		*/
-		
-		{
-			double maxRho = Math.max(img.width(), img.height()) * Math.sqrt(2);
-			union.addAll(shorter);
-			union.addAll(longer);
-			Point[] lines = new Point[union.size()];
-			union.toArray(lines);
-			int unionCount = HierarchicalClustering.countClusters(lines, 0.0237, maxRho, Math.PI, null);
-			System.out.println("Union count: " + unionCount);
-		}
-		
-		
-		/*
-		union.addAll(shorter);
-		System.out.println("Vetted lines: " + union.size());
-		for(Point p : union)
-			System.out.printf("(%.2f, %.2f)\n", p.x, p.y);
-		*/
-		
-		/*
-		Comparator<Point> comp = new Comparator<Point>()
-		{
-			@Override
-			public int compare(Point o1, Point o2)
-			{
-				return (int)Math.signum(o2.y - o1.y);
-			}
-		};
-		Collections.sort(normalLines, comp);
-		Collections.sort(transformedLines, comp);
-		System.out.println("Normal");
-		for(Point p : normalLines)
-			System.out.printf("(%.2f, %.2f)\n", p.y, p.x);
-		System.out.println("Transformed");
-		for(Point p : transformedLines)
-			System.out.printf("(%.2f, %.2f)\n", p.y, p.x);
-		*/
+		p.x = rhoPrime;
+		p.y = thetaPrime;
 	}
 	
 	static boolean approx(double d, double b, double delta)
@@ -231,6 +159,7 @@ public class Numpick
 		
 		// Build the data
 		final List<Mat> images = new ArrayList<Mat>();
+		final List<Mat> imagesCW = new ArrayList<Mat>();
 		final List<Integer> counts = new ArrayList<Integer>();
 		final List<Double> dataPercents = new ArrayList<Double>();
 		AtomicReference<Double> dataPercent = new AtomicReference<Double>();
@@ -238,6 +167,8 @@ public class Numpick
 		{
 			BufferedReader reader = new BufferedReader(new FileReader("unityPictures/toothpickCounts.txt"));
 			String line;
+			reader.skip(20000);
+			reader.readLine();
 			while((line = reader.readLine()) != null)
 			{
 				String filename = "unityPictures/" + line.substring(0, 40);
@@ -246,10 +177,19 @@ public class Numpick
 				
 				if(image != null)
 				{
+					Mat cw = new Mat();
+					image.copyTo(cw);;
+					Core.transpose(cw, cw);
+					Core.flip(cw, cw, 1);
+					
 					images.add(image);
+					imagesCW.add(cw);
 					counts.add(actualToothpicks);
 					dataPercents.add(dataPercent.get());
 				}
+				
+				if(images.size() > 100)
+					break;
 			}
 			reader.close();
 			
@@ -271,7 +211,7 @@ public class Numpick
 		
 		for(int i=0; i<n; i++)
 		{
-			int estimatedToothpicks = countToothpicks(images.get(i), houghThreshold, dataPercents.get(i), splitThreshold);
+			int estimatedToothpicks = countToothpicks(images.get(i), imagesCW.get(i), houghThreshold, dataPercents.get(i), splitThreshold, null, null);
 			int difference = Math.abs(estimatedToothpicks - counts.get(i));
 			fitnesses[i] = (double)difference/counts.get(i); 
 			totalFitness += fitnesses[i];
@@ -294,17 +234,15 @@ public class Numpick
 	
 	public static int countToothpicks(Mat preProcessedImage, int houghThreshold, double percentData, double splitThreshold)
 	{
-		return countToothpicks(preProcessedImage, houghThreshold, splitThreshold, percentData, null, null);
+		return countToothpicks(preProcessedImage, null, houghThreshold, splitThreshold, percentData, null, null);
 	}
 	
-	public static int countToothpicks(Mat preProcessedImage, int houghThreshold, double splitThreshold, double percentData, Mat raw, List<Point> lines)
+	public static int countToothpicks(Mat preProcessedImage, Mat cw, int houghThreshold, double splitThreshold, double percentData, Mat raw, List<Point> lines)
 	{
 		int count = 0;
 		boolean customHough = false;
 		Point[] lineArray;
-		
-		// This aims to give more fine-tune detection to images with a lot of toothpicks 
-		// splitThreshold *= 1 - percentData;
+		Point[] lineArrayCW = null;
 		
 		if(customHough)
 		{	
@@ -315,6 +253,13 @@ public class Numpick
 			Mat temp = new Mat();
 			Imgproc.HoughLines(preProcessedImage, temp, 1, Math.PI/180, houghThreshold);
 			lineArray = makePoints(temp);
+			
+			Mat temp2 = new Mat();
+			Imgproc.HoughLines(cw, temp2, 1, Math.PI/180, houghThreshold);
+			lineArrayCW = makePoints(temp2);
+			
+			for(Point p : lineArrayCW)
+				transformLineCW(p, cw.width());
 		}
 		
 		if(ImagePreprocessor.pictureOutput && raw != null)
@@ -323,9 +268,12 @@ public class Numpick
 		}
 		
 		List<Point> toothpicks = new ArrayList<Point>();
+		Point[] allLines = new Point[lineArray.length + lineArrayCW.length];
+		System.arraycopy(lineArray, 0, allLines, 0, lineArray.length);
+		System.arraycopy(lineArrayCW, 0, allLines, lineArray.length, lineArrayCW.length);
 		
 		double maxRho = Math.max(preProcessedImage.width(), preProcessedImage.height()) * Math.sqrt(2);
-		count = HierarchicalClustering.countClusters(lineArray, splitThreshold, maxRho, Math.PI, toothpicks);
+		count = HierarchicalClustering.countClusters(allLines, splitThreshold, maxRho, Math.PI, toothpicks);
 		
 		Point[] toothpickArray = new Point[toothpicks.size()];
 		toothpicks.toArray(toothpickArray);
