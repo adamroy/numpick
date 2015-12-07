@@ -61,14 +61,30 @@ public class HierarchicalClustering
 	 */
 	public static int countClusters(Point[] lines, double maxDistanceInCluster, double maxRho, double maxTheta)
 	{
+		return countClusters(lines, maxDistanceInCluster, maxRho, maxTheta, null);
+	}
+	
+	/**
+	 * Agglomerative hierarchical cluster
+	 * https://en.wikipedia.org/wiki/Hierarchical_clustering
+	 * https://en.wikipedia.org/wiki/Single-linkage_clustering
+	 *  
+	 * @param lines The lines to cluster, in (rho, theta) form
+	 * @param maxDistanceInCluster maximum euclidean distance between elements in a cluster in normalized parameter space
+	 * @param maxRho largest value rho can take
+	 * @param maxTheta largest value theta can take
+	 * @param finalLines an optional list if you want the lines back
+	 * @return the estimated number of distinct clusters
+	 */
+	public static int countClusters(Point[] lines, double maxDistanceInCluster, double maxRho, double maxTheta, List<Point> finalLines)
+	{
 		if(lines.length == 0)
 			return 0;
 		if(lines.length == 1)
+		{
+			finalLines.add(lines[0]);
 			return 1;
-		
-		double[] d0 = new double[lines.length - 1];
-		double[] runningAverage = new double[lines.length - 1];
-		double[] d1 = new double[lines.length - 2];
+		}
 		
 		// Construct initial clusters containing one point
 		List<Cluster> clusters = new ArrayList<HierarchicalClustering.Cluster>();
@@ -105,12 +121,11 @@ public class HierarchicalClustering
 			
 			if(minimumDistance != Double.POSITIVE_INFINITY && minimumDistance > maxDistanceInCluster)
 			{
-				int size = clusters.size(); 
+				int size = clusters.size();
+				copyClustersToList(clusters, finalLines, maxRho, maxTheta);
 				return size;
 			}
-			
-			d0[distIndex++] = minimumDistance;
-			
+						
 			if(minimumDistance != Double.POSITIVE_INFINITY && mi != -1 && mj != -1)
 			{
 				// Remove j first because it is necessarily larger
@@ -121,32 +136,20 @@ public class HierarchicalClustering
 			
 			if(clusters.size() == 1)
 			{
-				// System.out.print("\nd0: ");
-				for(int i=0; i<d0.length; i++)
-				{
-					// System.out.print(d0[i] + ", ");
-					
-					// Exponential smoothing
-					if(i == 0)
-					{
-						runningAverage[i] = d0[i];
-					}
-					else
-					{
-						double t = 0.4f;
-						runningAverage[i] = d0[i] * t + runningAverage[i-1] * (1 - t);
-					}
-					
-					if(i > 0 && d0[i]/runningAverage[i-1] > maxDistanceInCluster)
-					{
-						int difference = d0.length - i;
- 						// System.out.println(difference);
- 						return difference;
-					}
-				}
-				
+				copyClustersToList(clusters, finalLines, maxRho, maxTheta);
 				return 1;
 			}
+		}
+	}
+	
+	private static void copyClustersToList(List<Cluster> clusters, List<Point> lines, double maxRho, double maxTheta)
+	{
+		if(lines == null)
+			return;
+		
+		for(Cluster c : clusters)
+		{
+			lines.add(new Point(c.centroid.x * maxRho, c.centroid.y * maxTheta));
 		}
 	}
 	

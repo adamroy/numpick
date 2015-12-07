@@ -1,5 +1,9 @@
 package numpick;
 
+import java.util.concurrent.atomic.AtomicReference;
+
+import javax.swing.text.Position;
+
 import org.opencv.core.Mat;
 import org.opencv.core.Size;
 import org.opencv.imgcodecs.Imgcodecs;
@@ -7,8 +11,8 @@ import org.opencv.imgproc.Imgproc;
 
 public class ImagePreprocessor
 {
-	static boolean pictureOutput = true;
-	static String outputFolder = "processedPictures/";
+	public static boolean pictureOutput = true;
+	public static String outputFolder = "processedPictures/";
 	static String suffix = "";
 	
 	static ImageProcessor gray = new ImageProcessor()
@@ -90,16 +94,48 @@ public class ImagePreprocessor
 	
 	public static Mat processImage(String filename)
 	{
+		return processImage(filename, null, null);
+	}
+	
+	public static Mat processImage(String filename, Mat raw, AtomicReference<Double> percentData)
+	{
 		try
 		{
-			Mat raw = Imgcodecs.imread(filename);
+			if(raw != null)
+			{
+				Imgcodecs.imread(filename).copyTo(raw);
+				resize.process(raw).copyTo(raw);
+			}
+			
+			Mat img = Imgcodecs.imread(filename);
+			
 			if(pictureOutput) 
 			{
-				Imgcodecs.imwrite(outputFolder+"raw"+suffix+".png", raw);
+				Imgcodecs.imwrite(outputFolder+"raw"+suffix+".png", img);
 				System.out.println(filename);
 			}
 			ImageProcess preProcessor = new ImageProcess(resize, gray, blur, canny);
-			Mat preProcessedImage = preProcessor.process(raw);
+			Mat preProcessedImage = preProcessor.process(img);
+			
+			if(percentData != null)
+			{
+				int dataCount = 0;
+				byte[] pixel = new byte[1];
+				for (int j = 0; j < preProcessedImage.rows(); j++)
+				{
+					for (int i = 0; i < preProcessedImage.cols(); i++)
+					{
+						int val;
+						if (preProcessedImage.get(i, j, pixel) > 0 && (val = (int) pixel[0] & 0xFF) > 0)
+						{
+							dataCount++;
+						}
+					}
+				}
+				int totalPixels = preProcessedImage.width() * preProcessedImage.height();
+				percentData.set((double)dataCount/totalPixels);
+			}
+			
 			return preProcessedImage;
 		}
 		catch(Exception e)
